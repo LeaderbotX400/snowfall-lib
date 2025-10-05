@@ -2,11 +2,11 @@
   description = "Snowfall Lib";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/release-23.11";
+    nixpkgs.url = "github:nixos/nixpkgs/release-25.05";
     # NOTE: `nix flake lock --update-input flake-utils-plus` is currently NOT
     # giving us the appropriate revision. We need a fix from a recent PR in
     # FUP, so this revision is being hard coded here for now.
-    flake-utils-plus.url = "github:gytis-ivaskevicius/flake-utils-plus?rev=3542fe9126dc492e53ddd252bb0260fe035f2c0f";
+    flake-utils-plus.url = "github:gytis-ivaskevicius/flake-utils-plus?rev=afcb15b845e74ac5e998358709b2b5fe42a948d1";
 
     flake-compat = {
       url = "github:edolstra/flake-compat";
@@ -14,11 +14,11 @@
     };
   };
 
-  outputs = inputs: let
+  outputs = {self, ...}@inputs: let
     core-inputs =
       inputs
       // {
-        src = ./.;
+        src = self;
       };
 
     # Create the library, extending the nixpkgs library and merging
