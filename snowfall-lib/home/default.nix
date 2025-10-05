@@ -275,7 +275,8 @@ in {
         config = {
           home-manager.extraSpecialArgs = {
             inherit system target format virtual systems host;
-
+            inherit (snowfall-config) namespace;
+            
             lib = home-lib;
 
             inputs = snowfall-lib.flake.without-src user-inputs;
