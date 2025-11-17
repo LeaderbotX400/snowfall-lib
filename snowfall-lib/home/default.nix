@@ -303,6 +303,9 @@ in {
             user-module = head created-user.modules;
             other-modules = users.users.${name}.modules or [];
             user-name = created-user.specialArgs.user;
+            # Determine if the user has a hostname specified in their home configuration.
+            # If the hostname is not empty, we should create the system user.
+            user-has-hostname = created-user.specialArgs.host != "";
           in
             args @ {
               config,
@@ -313,8 +316,8 @@ in {
               ...
             }: let
               host-matches =
-                (name == "${user-name}@${host}")
-                || (name == "${user-name}@${system}");
+                (name == "${user-name}@${host}");
+                # || (name == "${user-name}@${system}");
 
               # NOTE: To conform to the config structure of home-manager, we have to
               # remap the options coming from `snowfallorg.user.<name>.home.config` since `mkAliasDefinitions`
@@ -350,19 +353,24 @@ in {
 
               config = mkIf host-matches {
                 # Initialize user information.
-                snowfallorg.users.${user-name}.home.config = {
-                  snowfallorg.user = {
-                    enable = mkDefault true;
-                    name = mkDefault user-name;
-                  };
+                # Only create the system user if a hostname was specified in the home configuration.
+                snowfallorg.users.${user-name} = {
+                  create = mkDefault user-has-hostname;
+                                    
+                  home.config = {
+                    snowfallorg.user = {
+                      enable = mkDefault true;
+                      name = mkDefault user-name;
+                    };
 
-                  # NOTE: specialArgs are not propagated by Home-Manager without this.
-                  # However, not all specialArgs values can be set when using `_module.args`.
-                  _module.args = builtins.removeAttrs ((users.users.${name}.specialArgs or {})
-                    // {
-                      namespace = snowfall-config.namespace;
-                    })
-                  ["options" "config" "lib" "pkgs" "specialArgs" "host"];
+                    # NOTE: specialArgs are not propagated by Home-Manager without this.
+                    # However, not all specialArgs values can be set when using `_module.args`.
+                    _module.args = builtins.removeAttrs ((users.users.${name}.specialArgs or {})
+                      // {
+                        namespace = snowfall-config.namespace;
+                      })
+                    ["options" "config" "lib" "pkgs" "specialArgs" "host"];
+                  };
                 };
 
                 home-manager = {
