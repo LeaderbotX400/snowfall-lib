@@ -52,13 +52,13 @@ in {
           create = mkOption {
             description = "Whether to create the user automatically.";
             type = types.bool;
-            default = true;
+            default = false;
           };
 
           admin = mkOption {
             description = "Whether the user should be added to the wheel group.";
             type = types.bool;
-            default = true;
+            default = false;
           };
 
           home = {
