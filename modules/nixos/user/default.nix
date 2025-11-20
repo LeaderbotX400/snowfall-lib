@@ -44,6 +44,12 @@ in {
   ];
 
   options.snowfallorg = {
+    useGlobalUsers = mkOption {
+      description = "Whether to create system users for all defined users.";
+      type = types.bool;
+      default = false;
+    };
+
     users = mkOption {
       description = "User configuration.";
       default = {};
@@ -52,7 +58,7 @@ in {
           create = mkOption {
             description = "Whether to create the user automatically.";
             type = types.bool;
-            default = false;
+            default = true;
           };
 
           admin = mkOption {
