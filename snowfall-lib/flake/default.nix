@@ -6,177 +6,127 @@
 }:
 let
   inherit (core-inputs.nixpkgs.lib)
-    assertMsg
-    foldl
-    filterAttrs
     const
-    mapAttrs
-    mapAttrs'
-    hasSuffix
-    removeSuffix
-    nameValuePair
+    filterAttrs
     ;
 in
-rec {
+{
   flake = rec {
     ## Remove the `self` attribute from an attribute set.
-    ## Example Usage:
-    ## ```nix
-    ## without-self { self = {}; x = true; }
-    ## ```
-    ## Result:
-    ## ```nix
-    ## { x = true; }
-    ## ```
     #@ Attrs -> Attrs
-    without-self = flake-inputs: builtins.removeAttrs flake-inputs [ "self" ];
+    without-self = attrs: builtins.removeAttrs attrs ["self"];
 
     ## Remove the `src` attribute from an attribute set.
-    ## Example Usage:
-    ## ```nix
-    ## without-src { src = ./.; x = true; }
-    ## ```
-    ## Result:
-    ## ```nix
-    ## { x = true; }
-    ## ```
     #@ Attrs -> Attrs
-    without-src = flake-inputs: builtins.removeAttrs flake-inputs [ "src" ];
+    without-src = attrs: builtins.removeAttrs attrs ["src"];
 
     ## Remove the `src` and `self` attributes from an attribute set.
-    ## Example Usage:
-    ## ```nix
-    ## without-snowfall-inputs { self = {}; src = ./.; x = true; }
-    ## ```
-    ## Result:
-    ## ```nix
-    ## { x = true; }
-    ## ```
     #@ Attrs -> Attrs
     without-snowfall-inputs = snowfall-lib.fp.compose without-self without-src;
 
-    ## Remove Snowfall-specific attributes so the rest can be safely passed to flake-utils-plus.
-    ## Example Usage:
-    ## ```nix
-    ## without-snowfall-options { src = ./.; x = true; }
-    ## ```
-    ## Result:
-    ## ```nix
-    ## { x = true; }
-    ## ```
-    #@ Attrs -> Attrs
-    without-snowfall-options =
-      flake-options:
-      builtins.removeAttrs flake-options [
-        "systems"
-        "modules"
-        "overlays"
-        "packages"
-        "outputs-builder"
-        "outputsBuilder"
-        "packagesPrefix"
-        "hosts"
-        "homes"
-        "channels-config"
-        "templates"
-        "checks"
-        "alias"
-        "snowfall"
-      ];
+    ## Snowfall-specific options to remove before passing to flake-utils-plus.
+    snowfall-option-names = [
+      "systems"
+      "modules"
+      "overlays"
+      "packages"
+      "outputs-builder"
+      "outputsBuilder"
+      "packagesPrefix"
+      "hosts"
+      "homes"
+      "channels-config"
+      "templates"
+      "checks"
+      "alias"
+      "snowfall"
+    ];
 
-    ## Transform an attribute set of inputs into an attribute set where the values are the inputs' `lib` attribute. Entries without a `lib` attribute are removed.
-    ## Example Usage:
-    ## ```nix
-    ## get-lib { x = nixpkgs; y = {}; }
-    ## ```
-    ## Result:
-    ## ```nix
-    ## { x = nixpkgs.lib; }
-    ## ```
+    ## Remove Snowfall-specific attributes so the rest can be safely passed to flake-utils-plus.
     #@ Attrs -> Attrs
-    get-libs =
-      attrs:
+    without-snowfall-options = attrs: builtins.removeAttrs attrs snowfall-option-names;
+
+    ## Extract `lib` attributes from inputs, filtering out entries without `lib`.
+    #@ Attrs -> Attrs
+    get-libs = attrs:
       let
-        # @PERF(jakehamilton): Replace filter+map with a fold.
-        attrs-with-libs = filterAttrs (name: value: builtins.isAttrs (value.lib or null)) attrs;
-        libs = builtins.mapAttrs (name: input: input.lib) attrs-with-libs;
+        attrs-with-libs = filterAttrs (_: value: builtins.isAttrs (value.lib or null)) attrs;
       in
-      libs;
+      builtins.mapAttrs (_: input: input.lib) attrs-with-libs;
   };
 
-  mkFlake =
-    full-flake-options:
+  mkFlake = full-flake-options:
     let
       namespace = snowfall-config.namespace or "internal";
-      custom-flake-options = flake.without-snowfall-options full-flake-options;
-      alias = full-flake-options.alias or { };
-      homes = snowfall-lib.home.create-homes (full-flake-options.homes or { });
+      custom-flake-options = snowfall-lib.flake.without-snowfall-options full-flake-options;
+      alias = full-flake-options.alias or {};
+
+      # Build system and home configurations
+      homes = snowfall-lib.home.create-homes (full-flake-options.homes or {});
       systems = snowfall-lib.system.create-systems {
-        systems = full-flake-options.systems or { };
-        homes = full-flake-options.homes or { };
+        systems = full-flake-options.systems or {};
+        homes = full-flake-options.homes or {};
       };
       hosts = snowfall-lib.attrs.merge-shallow [
-        (full-flake-options.systems.hosts or { })
+        (full-flake-options.systems.hosts or {})
         systems
         homes
       ];
+
+      # Build module exports
       templates = snowfall-lib.template.create-templates {
-        overrides = full-flake-options.templates or { };
-        alias = alias.templates or { };
+        overrides = full-flake-options.templates or {};
+        alias = alias.templates or {};
       };
       nixos-modules = snowfall-lib.module.create-modules {
         src = snowfall-lib.fs.get-snowfall-file "modules/nixos";
-        overrides = full-flake-options.modules.nixos or { };
-        alias = alias.modules.nixos or { };
+        overrides = full-flake-options.modules.nixos or {};
+        alias = alias.modules.nixos or {};
       };
       darwin-modules = snowfall-lib.module.create-modules {
         src = snowfall-lib.fs.get-snowfall-file "modules/darwin";
-        overrides = full-flake-options.modules.darwin or { };
-        alias = alias.modules.darwin or { };
+        overrides = full-flake-options.modules.darwin or {};
+        alias = alias.modules.darwin or {};
       };
       home-modules = snowfall-lib.module.create-modules {
         src = snowfall-lib.fs.get-snowfall-file "modules/home";
-        overrides = full-flake-options.modules.home or { };
-        alias = alias.modules.home or { };
+        overrides = full-flake-options.modules.home or {};
+        alias = alias.modules.home or {};
       };
       overlays = snowfall-lib.overlay.create-overlays {
         inherit namespace;
-        extra-overlays = full-flake-options.extra-exported-overlays or { };
+        extra-overlays = full-flake-options.extra-exported-overlays or {};
       };
 
-      outputs-builder =
-        channels:
+      # Build per-system outputs
+      outputs-builder = channels:
         let
           user-outputs-builder =
-            full-flake-options.outputs-builder or full-flake-options.outputsBuilder or (const { });
+            full-flake-options.outputs-builder or full-flake-options.outputsBuilder or (const {});
           user-outputs = user-outputs-builder channels;
+
           packages = snowfall-lib.package.create-packages {
             inherit channels namespace;
-            overrides = (full-flake-options.packages or { }) // (user-outputs.packages or { });
-            alias = alias.packages or { };
+            overrides = (full-flake-options.packages or {}) // (user-outputs.packages or {});
+            alias = alias.packages or {};
           };
           shells = snowfall-lib.shell.create-shells {
             inherit channels;
-            overrides = (full-flake-options.shells or { }) // (user-outputs.devShells or { });
-            alias = alias.shells or { };
+            overrides = (full-flake-options.shells or {}) // (user-outputs.devShells or {});
+            alias = alias.shells or {};
           };
           checks = snowfall-lib.check.create-checks {
             inherit channels;
-            overrides = (full-flake-options.checks or { }) // (user-outputs.checks or { });
-            alias = alias.checks or { };
-          };
-
-          outputs = {
-            inherit packages checks;
-
-            devShells = shells;
+            overrides = (full-flake-options.checks or {}) // (user-outputs.checks or {});
+            alias = alias.checks or {};
           };
         in
         snowfall-lib.attrs.merge-deep [
           user-outputs
-          outputs
+          { inherit packages checks; devShells = shells; }
         ];
 
+      # Compose final flake options for flake-utils-plus
       flake-options = custom-flake-options // {
         inherit hosts templates;
         inherit (user-inputs) self;
@@ -188,53 +138,32 @@ rec {
         darwinModules = darwin-modules;
         homeModules = home-modules;
 
-        channelsConfig = full-flake-options.channels-config or { };
+        channelsConfig = full-flake-options.channels-config or {};
 
         channels.nixpkgs.overlaysBuilder = snowfall-lib.overlay.create-overlays-builder {
           inherit namespace;
-          extra-overlays = full-flake-options.overlays or [ ];
+          extra-overlays = full-flake-options.overlays or [];
         };
 
         outputsBuilder = outputs-builder;
 
         snowfall = {
           config = snowfall-config;
-          raw-config = full-flake-options.snowfall or { };
+          raw-config = full-flake-options.snowfall or {};
           user-lib = snowfall-lib.internal.user-lib;
         };
       };
 
       flake-utils-plus-outputs = core-inputs.flake-utils-plus.lib.mkFlake flake-options;
-
-      flake-outputs = flake-utils-plus-outputs // {
-        inherit overlays;
-      };
+      flake-outputs = flake-utils-plus-outputs // { inherit overlays; };
     in
-    flake-outputs
-    // {
-      packages =
-        flake-outputs.packages
-        // (builtins.listToAttrs (
-          builtins.map (system: {
-            name = system;
-            value = flake-outputs.packages.${system} // {
-              # homeConfigurations =
-              #   let
-              #     homeNames = filterAttrs (_: home: home.system == system) homes;
-              #     homeConfigurations = mapAttrs (
-              #       home-name: _: flake-outputs.homeConfigurations.${home-name}
-              #     ) homeNames;
-              #     renamedHomeConfigurations = mapAttrs' (
-              #       name: value:
-              #       if hasSuffix "@${system}" name then
-              #         nameValuePair (removeSuffix "@${system}" name) value
-              #       else
-              #         nameValuePair name value
-              #     ) homeConfigurations;
-              #   in
-              #   renamedHomeConfigurations;
-            };
-          }) (builtins.attrNames flake-outputs.pkgs)
-        ));
+    flake-outputs // {
+      # Extend packages with per-system attributes
+      packages = flake-outputs.packages // (builtins.listToAttrs (
+        builtins.map (system: {
+          name = system;
+          value = flake-outputs.packages.${system} // {};
+        }) (builtins.attrNames flake-outputs.pkgs)
+      ));
     };
 }

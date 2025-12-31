@@ -46,24 +46,17 @@
   in {
     inherit mkLib mkFlake;
 
-    nixosModules = {
-      user = ./modules/nixos/user/default.nix;
-    };
+    # Module exports for external consumption
+    nixosModules.user = ./modules/nixos/user/default.nix;
+    darwinModules.user = ./modules/darwin/user/default.nix;
+    homeModules.user = ./modules/home/user/default.nix;
 
-    darwinModules = {
-      user = ./modules/darwin/user/default.nix;
-    };
-
-    homeModules = {
-      user = ./modules/home/user/default.nix;
-    };
-
-    formatter = {
-      x86_64-linux = inputs.nixpkgs.legacyPackages.x86_64-linux.alejandra;
-      aarch64-linux = inputs.nixpkgs.legacyPackages.aarch64-linux.alejandra;
-      x86_64-darwin = inputs.nixpkgs.legacyPackages.x86_64-darwin.alejandra;
-      aarch64-darwin = inputs.nixpkgs.legacyPackages.aarch64-darwin.alejandra;
-    };
+    formatter = builtins.listToAttrs (
+      builtins.map (system: {
+        name = system;
+        value = inputs.nixpkgs.legacyPackages.${system}.alejandra;
+      }) ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"]
+    );
 
     snowfall = rec {
       raw-config = config;

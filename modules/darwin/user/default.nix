@@ -1,50 +1,59 @@
 {
   pkgs,
   lib,
-  options,
   config,
-  inputs,
+  inputs ? {},
   ...
-}: let
-  inherit
-    (lib)
-    types
-    mkOption
-    mkDefault
-    mkRenamedOptionModule
+}:
+let
+  inherit (lib)
     foldl
+    mkDefault
+    mkOption
+    mkRenamedOptionModule
     optionalAttrs
+    types
     ;
 
   cfg = config.snowfallorg;
-
   user-names = builtins.attrNames cfg.users;
 
-  create-system-users = system-users: name: let
-    user = cfg.users.${name};
-  in
-    system-users
-    // (optionalAttrs user.create {
+  create-system-users = system-users: name:
+    let user = cfg.users.${name};
+    in system-users // (optionalAttrs user.create {
       ${name} = {
         home = mkDefault user.home.path;
         isHidden = mkDefault false;
       };
     });
-in {
+in
+{
   imports = [
     (mkRenamedOptionModule ["snowfallorg" "user"] ["snowfallorg" "users"])
   ];
 
   options.snowfallorg = {
+    useGlobalUsers = mkOption {
+      description = "Whether to create system users for all defined users.";
+      type = types.bool;
+      default = false;
+    };
+
     users = mkOption {
       description = "User configuration.";
       default = {};
-      type = types.attrsOf (types.submodule ({name, ...}: {
+      type = types.attrsOf (types.submodule ({ name, ... }: {
         options = {
           create = mkOption {
             description = "Whether to create the user automatically.";
             type = types.bool;
             default = true;
+          };
+
+          admin = mkOption {
+            description = "Whether the user should be added to the admin group.";
+            type = types.bool;
+            default = false;
           };
 
           home = {
@@ -59,39 +68,28 @@ in {
             };
 
             config = mkOption {
-              # HM-compatible options taken from:
-              # https://github.com/nix-community/home-manager/blob/0ee5ab611dc1fbb5180bd7d88d2aeb7841a4d179/nixos/common.nix#L14
               type = types.submoduleWith {
-                specialArgs =
-                  {
-                    osConfig = config;
-                    modulesPath = "${inputs.home-manager}/modules";
-                  }
-                  // config.home-manager.extraSpecialArgs;
-                modules =
-                  [
-                    ({
-                      lib,
-                      modulesPath,
-                      ...
-                    }: {
+                specialArgs = {
+                  osConfig = config;
+                  modulesPath = "${inputs.home-manager or "/"}/modules";
+                } // (config.home-manager.extraSpecialArgs or {});
+                modules = [
+                  ({ lib, modulesPath, ... }:
+                    if inputs ? home-manager then {
                       imports = import "${modulesPath}/modules.nix" {
                         inherit pkgs lib;
-                        useNixpkgsModule = !config.home-manager.useGlobalPkgs;
+                        useNixpkgsModule = !(config.home-manager.useGlobalPkgs or false);
                       };
-
                       config = {
                         submoduleSupport.enable = true;
-                        submoduleSupport.externalPackageInstall = config.home-manager.useUserPackages;
-
+                        submoduleSupport.externalPackageInstall = config.home-manager.useUserPackages or false;
                         home.username = config.users.users.${name}.name;
                         home.homeDirectory = config.users.users.${name}.home;
-
                         nix.package = config.nix.package;
                       };
-                    })
-                  ]
-                  ++ config.home-manager.sharedModules;
+                    } else {}
+                  )
+                ] ++ (config.home-manager.sharedModules or []);
               };
             };
           };

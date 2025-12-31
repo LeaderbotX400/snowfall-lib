@@ -3,19 +3,19 @@
   user-inputs,
   snowfall-lib,
   snowfall-config,
-}: let
-  inherit
-    (core-inputs.nixpkgs.lib)
-    assertMsg
-    mapAttrsToList
-    mapAttrs
+}:
+let
+  inherit (core-inputs.nixpkgs.lib)
     flatten
     foldl
-    recursiveUpdate
-    mergeAttrs
     isDerivation
+    mapAttrs
+    mapAttrsToList
+    mergeAttrs
+    recursiveUpdate
     ;
-in {
+in
+{
   attrs = {
     ## Map and flatten an attribute set into a list.
     ## Example Usage:
@@ -27,8 +27,7 @@ in {
     ## [ "x" 1 "y" 2 ]
     ## ```
     #@ (a -> b -> [c]) -> Attrs -> [c]
-    map-concat-attrs-to-list = f: attrs:
-      flatten (mapAttrsToList f attrs);
+    map-concat-attrs-to-list = f: attrs: flatten (mapAttrsToList f attrs);
 
     ## Recursively merge a list of attribute sets.
     ## Example Usage:
@@ -64,23 +63,12 @@ in {
     ## { vim = ...; some.value = false; }
     ## ```
     #@ [Attrs] -> Attrs
-    merge-shallow-packages = items:
-      foldl
-      (
-        result: item:
-          result
-          // (mapAttrs
-            (
-              name: value:
-                if isDerivation value
-                then value
-                else if builtins.isAttrs value
-                then (result.${name} or {}) // value
-                else value
-            )
-            item)
-      )
-      {}
-      items;
+    merge-shallow-packages = foldl (result: item:
+      result // (mapAttrs (name: value:
+        if isDerivation value then value
+        else if builtins.isAttrs value then (result.${name} or {}) // value
+        else value
+      ) item)
+    ) {};
   };
 }
